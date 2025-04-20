@@ -1,47 +1,59 @@
-"use client"
+'use client'
 
-import { useState } from "react"
-import { Button } from "@/components/ui/button"
-import { Card, CardContent } from "@/components/ui/card"
-import { Checkbox } from "@/components/ui/checkbox"
-import { Input } from "@/components/ui/input"
-import { LogOut, Plus, Trash2 } from "lucide-react"
-import { logout } from "@/app/login/actions"
+import { useEffect, useState, useTransition } from 'react'
+import { Button } from '@/components/ui/button'
+import { Card, CardContent } from '@/components/ui/card'
+import { Checkbox } from '@/components/ui/checkbox'
+import { Input } from '@/components/ui/input'
+import { LogOut, Plus, Trash2 } from 'lucide-react'
+import { logout } from '@/app/login/actions'
+import { fetchTodos, toggleTodo, deleteTodo, addTodo } from './actions'
 
-// Mock data para as tarefas
-const initialTodos = [
-  { id: 1, text: "Estudar React", completed: true },
-  { id: 2, text: "Criar projeto Next.js", completed: false },
-  { id: 3, text: "Aprender Tailwind CSS", completed: false },
-  { id: 4, text: "Implementar autenticação", completed: false },
-]
+type Todo = {
+  id: number
+  description: string
+  is_complete: boolean
+}
 
 export default function TodosPage() {
-  const [todos, setTodos] = useState(initialTodos)
-  const [newTodo, setNewTodo] = useState("")
+  const [todos, setTodos] = useState<Todo[]>([])
+  const [newTodo, setNewTodo] = useState('')
+  const [isPending, startTransition] = useTransition()
 
-  // Adicionar nova tarefa
-  const addTodo = () => {
-    if (newTodo.trim() === "") return
-
-    const newTask = {
-      id: todos.length > 0 ? Math.max(...todos.map((t) => t.id)) + 1 : 1,
-      text: newTodo,
-      completed: false,
+  useEffect(() => {
+    const loadTodos = async () => {
+      const data = await fetchTodos()
+      setTodos(data)
     }
+    loadTodos()
+  }, [])
 
-    setTodos([...todos, newTask])
-    setNewTodo("")
+  const handleAdd = async () => {
+    if (!newTodo.trim()) return
+
+    const formData = new FormData()
+    formData.append('description', newTodo)
+
+    startTransition(() => {
+      addTodo(formData).then(() => {
+        setNewTodo('')
+        fetchTodos().then(setTodos)
+      })
+    })
   }
 
-  // Alternar status de conclusão
-  const toggleTodo = (id: number) => {
-    setTodos(todos.map((todo) => (todo.id === id ? { ...todo, completed: !todo.completed } : todo)))
+  const handleToggle = (todo: Todo) => {
+    startTransition(() => {
+      toggleTodo(todo.id, todo.is_complete).then(() =>
+        fetchTodos().then(setTodos)
+      )
+    })
   }
 
-  // Remover tarefa
-  const removeTodo = (id: number) => {
-    setTodos(todos.filter((todo) => todo.id !== id))
+  const handleDelete = (id: number) => {
+    startTransition(() => {
+      deleteTodo(id).then(() => fetchTodos().then(setTodos))
+    })
   }
 
   return (
@@ -56,7 +68,7 @@ export default function TodosPage() {
         </form>
       </header>
 
-      {/* Lista de tarefas - área com scroll */}
+      {/* Lista de tarefas */}
       <div className="flex-1 overflow-auto p-4 sm:p-6">
         <div className="mx-auto max-w-3xl space-y-3">
           {todos.map((todo) => (
@@ -66,22 +78,22 @@ export default function TodosPage() {
                   <div className="flex h-6 w-6 items-center justify-center rounded-full border border-gray-300 bg-white">
                     <Checkbox
                       id={`todo-${todo.id}`}
-                      checked={todo.completed}
-                      onCheckedChange={() => toggleTodo(todo.id)}
+                      checked={todo.is_complete}
+                      onCheckedChange={() => handleToggle(todo)}
                       className="h-4 w-4 rounded-full"
                     />
                   </div>
                   <label
                     htmlFor={`todo-${todo.id}`}
-                    className={`text-base ${todo.completed ? "line-through text-gray-500" : "text-gray-900"}`}
+                    className={`text-base ${todo.is_complete ? 'line-through text-gray-500' : 'text-gray-900'}`}
                   >
-                    {todo.text}
+                    {todo.description}
                   </label>
                 </div>
                 <Button
                   variant="ghost"
                   size="icon"
-                  onClick={() => removeTodo(todo.id)}
+                  onClick={() => handleDelete(todo.id)}
                   className="text-gray-500 hover:text-red-500"
                 >
                   <Trash2 className="h-5 w-5" />
@@ -92,7 +104,7 @@ export default function TodosPage() {
         </div>
       </div>
 
-      {/* Input fixo na parte inferior */}
+      {/* Input fixo */}
       <div className="bg-white border-t p-4 sm:p-6 sticky bottom-0 z-10">
         <div className="mx-auto max-w-3xl">
           <div className="flex items-center space-x-2">
@@ -100,10 +112,15 @@ export default function TodosPage() {
               placeholder="Adicionar nova tarefa..."
               value={newTodo}
               onChange={(e) => setNewTodo(e.target.value)}
-              onKeyDown={(e) => e.key === "Enter" && addTodo()}
+              onKeyDown={(e) => e.key === 'Enter' && handleAdd()}
               className="flex-1 h-12 rounded-full border-gray-300 px-4 shadow-sm focus-visible:ring-2 focus-visible:ring-offset-0"
             />
-            <Button onClick={addTodo} size="icon" className="h-12 w-12 rounded-full bg-gray-900 hover:bg-black">
+            <Button
+              onClick={handleAdd}
+              size="icon"
+              className="h-12 w-12 rounded-full bg-gray-900 hover:bg-black"
+              disabled={isPending}
+            >
               <Plus className="h-5 w-5" />
             </Button>
           </div>
